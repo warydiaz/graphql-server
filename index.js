@@ -1,11 +1,8 @@
 import { gql, ApolloServer } from 'apollo-server';
-import { v1 as uuid } from 'uuid';
+import './db';
+import Person from './models/person.js';
 
-const persons = [
-    { name: 'John Doe', phone: "1234", street: "Loreto", city: "Santiago", birthYear: 1978, id: "1" },
-    { name: 'John Perez', phone: "5678", street: "Paseo de Gracia", city: "Barcelona", birthYear: 1979, id: "2" },
-    { name: 'Raul Diaz', street: "Diagonal", city: "Barcelona", birthYear: 1980, id: "3" }
-];
+
 
 const typeDefs = gql`
     enum YesNo {
@@ -46,45 +43,41 @@ const typeDefs = gql`
         personCount: Int!
         allPersons(phone: YesNo): [Person!]!
         findPerson(name: String!): Person
-    }
-`;
+    }`;
 
 const resolvers = {
     Query: {
-        personCount: () => persons.length,
+        personCount: () => Person.collection.countDocuments(),
         allPersons: (root, args) => {
-            if (!args.phone) return persons;
-            const phone = args.phone === 'YES';
-            return persons.filter(p => phone ? p.phone : !p.phone);
-        }
-    },
-
-    Mutation: {
-        addPerson: (root, args) => {
-            const person = { ...args, id: uuid() };
-            persons.push(person);
-            return person;
+            return Person.find({});
         },
-        editNumber: (root, args) => {
-            const personIndex = persons.findIndex(p => p.name === args.name);
+        findPerson: (root, args) => {
+            const name = args.name;
+            return Person.findOne({
+                name: name
+            })
+        },
 
-            if (personIndex === -1) return null;
+        Mutation: {
+            addPerson: (root, args) => {
+                const person = new Person({ ...args });
+                return person.save();
+            },
+            editNumber: async (root, args) => {
+                const person = await Person.findOne({ name: args.name });
+                person.phone = args.phone;
+                return person.save();
+            }
+        },
 
-            const person = persons[personIndex];
-            const updatedPerson = { ...person, phone: args.phone };
-            persons[personIndex] = updatedPerson;
-
-            return updatedPerson;
-        }
-    },
-
-    Person: {
-        age: (root) => new Date().getFullYear() - root.birthYear,
-        address: (root) => {
-            return {
-                street: root.street,
-                city: root.city
-            };
+        Person: {
+            age: (root) => new Date().getFullYear() - root.birthYear,
+            address: (root) => {
+                return {
+                    street: root.street,
+                    city: root.city
+                };
+            }
         }
     }
 };
