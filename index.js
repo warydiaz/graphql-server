@@ -1,4 +1,4 @@
-import { gql, ApolloServer } from 'apollo-server';
+import { gql, ApolloServer, UserInputError } from 'apollo-server';
 import './db.js';
 import Person from './models/person.js';
 
@@ -43,6 +43,16 @@ const typeDefs = gql`
         findPerson(name: String!): Person
     }`;
 
+    const savePersonData = async(person) => {
+        try {
+            await person.save();
+        } catch (error) {
+            throw new UserInputError(error.message, {
+                invalidArgs: person,
+            });
+        }
+    }
+
     const resolvers = {
         Query: {
             personCount: async () => await Person.collection.countDocuments(),
@@ -63,12 +73,18 @@ const typeDefs = gql`
         Mutation: {
             addPerson: async (root, args) => {
                 const person = new Person({ ...args });
-                return await person.save();
+                return await savePersonData(person);
             },
             editNumber: async (root, args) => {
                 const person = await Person.findOne({ name: args.name });
+                
+                if (!person) return null;
+
                 person.phone = args.phone;
-                return person.save();
+
+                await savePersonData(person);
+
+                return person.save();            
             }
         },
     
