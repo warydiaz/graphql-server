@@ -39,28 +39,31 @@ const typeDefs = gql`
     
     type Query {
         personCount: Int!
-        allPersons(phone: YesNo): [Person!]!
+        allPersons(phone: YesNo): [Person]!
         findPerson(name: String!): Person
     }`;
 
     const resolvers = {
         Query: {
-            personCount: () => Person.collection.countDocuments(),
-            allPersons: (root, args) => {
-                return Person.find({});
+            personCount: async () => await Person.collection.countDocuments(),
+            allPersons: async (root, args) => {
+
+                if (!args.phone) return await Person.find({});
+
+                return await Person.find({ phone: { $exists: args.phone === 'YES' } });
             },
-            findPerson: (root, args) => {
+            findPerson: async (root, args) => {
                 const name = args.name;
-                return Person.findOne({
+                return await Person.findOne({
                     name: name
                 });
             }
         },
     
         Mutation: {
-            addPerson: (root, args) => {
+            addPerson: async (root, args) => {
                 const person = new Person({ ...args });
-                return person.save();
+                return await person.save();
             },
             editNumber: async (root, args) => {
                 const person = await Person.findOne({ name: args.name });
