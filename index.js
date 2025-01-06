@@ -1,8 +1,6 @@
 import { gql, ApolloServer } from 'apollo-server';
-import './db';
+import './db.js';
 import Person from './models/person.js';
-
-
 
 const typeDefs = gql`
     enum YesNo {
@@ -45,19 +43,20 @@ const typeDefs = gql`
         findPerson(name: String!): Person
     }`;
 
-const resolvers = {
-    Query: {
-        personCount: () => Person.collection.countDocuments(),
-        allPersons: (root, args) => {
-            return Person.find({});
+    const resolvers = {
+        Query: {
+            personCount: () => Person.collection.countDocuments(),
+            allPersons: (root, args) => {
+                return Person.find({});
+            },
+            findPerson: (root, args) => {
+                const name = args.name;
+                return Person.findOne({
+                    name: name
+                });
+            }
         },
-        findPerson: (root, args) => {
-            const name = args.name;
-            return Person.findOne({
-                name: name
-            })
-        },
-
+    
         Mutation: {
             addPerson: (root, args) => {
                 const person = new Person({ ...args });
@@ -69,7 +68,7 @@ const resolvers = {
                 return person.save();
             }
         },
-
+    
         Person: {
             age: (root) => new Date().getFullYear() - root.birthYear,
             address: (root) => {
@@ -79,8 +78,8 @@ const resolvers = {
                 };
             }
         }
-    }
-};
+    };
+    
 
 const server = new ApolloServer({ typeDefs, resolvers });
 server.listen().then(({ url }) => {
