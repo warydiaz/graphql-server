@@ -1,4 +1,9 @@
-import { gql, ApolloServer, UserInputError } from "apollo-server";
+import {
+  gql,
+  ApolloServer,
+  UserInputError,
+  AuthenticationError,
+} from "apollo-server";
 import "./db.js";
 import Person from "./models/person.js";
 import User from "./models/user.js";
@@ -50,6 +55,8 @@ const typeDefs = gql`
     createUser(username: String!): User
 
     login(username: String!, password: String!): Token
+
+    addAsFriend(name: String!): User
   }
 
   type Query {
@@ -80,13 +87,26 @@ const resolvers = {
     findPerson: async (root, args) => {
       return await Person.findOne({ name: args.name });
     },
+    me: (root, args, context) => {
+      return context.currentUser;
+    },
   },
 
   Mutation: {
-    addPerson: async (root, args) => {
+    addPerson: async (root, args, context) => {
+      const { currentUser } = context;
+
+      if (!currentUser) throw new AuthenticationError("not authenticated");
+
       const person = new Person({ ...args });
-      return await savePersonData(person);
+      await savePersonData(person);
+
+      currentUser.friends = currentUser.friends.concat(person);
+      await savePersonData(currentUser);
+
+      return person;
     },
+
     editNumber: async (root, args) => {
       const person = await Person.findOne({ name: args.name });
 
@@ -114,6 +134,8 @@ const resolvers = {
     login: async (root, args) => {
       const user = await User.findOne({ username: args.username });
 
+      console.log(user);
+
       if (!user || args.password !== "secret") {
         throw new UserInputError("wrong credentials");
       }
@@ -124,6 +146,23 @@ const resolvers = {
       };
 
       return { value: jwt.sign(userForToken, JWT_SECRET) };
+    },
+
+    addAsFriend: async (root, args, context) => {
+      const { currentUser } = context;
+
+      const person = await Person.findOne({ name: args.name });
+      if (!currentUser || !person) throw new UserInputError("not found");
+
+      const alreadyFriend = (person) =>
+        !currentUser.friends.map((f) => f._id).includes(person._id);
+
+      if (alreadyFriend(person)) {
+        currentUser.friends = currentUser.friends.concat(person);
+        savePersonData(currentUser);
+      }
+
+      return person;
     },
   },
 
@@ -138,7 +177,20 @@ const resolvers = {
   },
 };
 
-const server = new ApolloServer({ typeDefs, resolvers });
+const server = new ApolloServer({
+  typeDefs,
+  resolvers,
+  context: async ({ req }) => {
+    const auth = req ? req.headers.authorization : null;
+    if (auth && auth.toLowerCase().startsWith("bearer ")) {
+      const decodedToken = jwt.verify(auth.substring(7), JWT_SECRET);
+      const currentUser = await User.findById(decodedToken.id).populate(
+        "friends"
+      );
+      return { currentUser };
+    }
+  },
+});
 server.listen().then(({ url }) => {
   console.log(`Server ready at ${url}`);
 });
